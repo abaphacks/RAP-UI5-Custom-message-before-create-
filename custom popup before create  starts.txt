@@ -1,0 +1,106 @@
+sap.ui.define(['sap/ui/core/mvc/ControllerExtension',
+	'sap/m/MessageToast',
+	'sap/m/MessageBox'
+], function (ControllerExtension, MessageToast,MessageBox) {
+	'use strict';
+	return ControllerExtension.extend('zccnobapi.ext.controller.CCExt', {
+		// this section allows to extend lifecycle hooks or hooks provided by Fiori elements
+		override: {
+			/**
+			 * Called when a controller is instantiated and its View controls (if available) are already created.
+			 * Can be used to modify the View before it is displayed, to bind event handlers and do other one-time initialization.
+			 * @memberOf zccnobapi.ext.controller.CCExt
+			 */
+			onInit: function () {
+				// you can access the Fiori elements extensionAPI via this.base.getExtensionAPI
+				var oModel = this.base.getExtensionAPI().getModel();
+				const oFilterId = "zccnobapi::CostCenterList--fe::FilterBar::CostCenter";
+
+				this.oServicePath = "/CostCenter/com.sap.gateway.srvd.zui_cc_without_bapi.v0001."
+
+				this.oView = this.base.getExtensionAPI().getEditFlow().getView();
+				const oTableToolabr = this.oView.byId("zccnobapi::CostCenterList--fe::table::CostCenter::LineItem-toolbar");
+				this.oStdCreate = oTableToolabr.getActions()[3].getAction();
+				this.oCustomCreate = oTableToolabr.getActions()[1].getAction();
+				this.oStdCreate.setVisible(false);
+
+
+
+				var oFilteBar = this.oView.byId(oFilterId);
+				if (oFilteBar) {
+					oFilteBar.setShowClearButton(true);
+				}
+			},
+		},
+		getFiltersOnACtionBtn: function () {
+		
+			const oFinalFilter = this._readFilter();
+			const oJsonFilter = JSON.stringify(oFinalFilter);
+			
+
+			this._sendFilters(oJsonFilter);
+		},
+		createDialog: function () {
+			// create process should start only when filters are available
+			const oFilters = this._readFilter();
+			if (oFilters.length === 0) {
+				MessageBox.error("Please enter manadtory filters before creating a record.");
+				return;
+			} else {
+				// 1st so a pop up message 
+				sap.m.MessageBox.warning("You are using Custom create action", {
+					title: "Confirmation Required",
+					actions: [sap.m.MessageBox.Action.OK, sap.m.MessageBox.Action.CANCEL],
+					onClose: function (sAction) {
+						if (sAction === sap.m.MessageBox.Action.OK) {
+							// if pressed ok on popup then send filters to backend and create process starts
+							const oJsonFilter = JSON.stringify(oFilters);
+							this._sendFilters(oJsonFilter);
+							this.oStdCreate.firePress();
+						}
+					}.bind(this)
+
+				});
+
+			}
+		},
+		_readFilter: function (oEvent) {
+			const ofilters = this.oView.byId("zccnobapi::CostCenterList--fe::FilterBar::CostCenter");
+			const oConditions = ofilters.getFilterConditions();
+			const oEntries = Object.entries(oConditions).slice(1);
+
+			// final filter = [ { name :'Valide from' operator : 'EQ'  value1 :''  value2:'' }]
+			const oFinalFilter = oEntries.flatMap(([name, records]) => {
+				const recordsArray = [].concat(records);
+
+				return recordsArray.map(item => {
+					return {
+						name: name,
+						operator: item.operator,
+						value1: item.values ? item.values[0] : null,
+						value2: (item.values && item.values.length > 1) ? item.values[1] : null
+					};
+				});
+			});
+
+			return oFinalFilter;
+		},
+		_sendFilters: function (ofilters) {
+			const oJsonFilter = JSON.stringify(ofilters);
+			// get the model( odata V4 model)
+			var oModel = this.base.getModel();
+			//create the binding conetext and set the parameter of action defined in metadata
+			var oContext = oModel.bindContext(this.oServicePath + "getFiltersOnActionBtn(...)")
+			// execute the and send the file content to backend 
+			oContext.setParameter("fileContent", oJsonFilter);
+			// if success then show success
+			oContext.execute().then(function () {
+				// alert("success");
+			}.bind(this)).catch(function (oError) {
+				console.log(oError + ":Failed to send filters.")
+			}.bind(this))
+		}
+
+
+	});
+});
